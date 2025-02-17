@@ -1,0 +1,33 @@
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pcs-annotator"
+version = "0.0.1"
+authors = [
+    { name = "Sina Salimian", email = "sina99.sn@gmail.com" }
+]
+description = "A Python library for classification tasks using multiple LLMs "
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "langchain",
+    "python-dotenv",
+    "langchain-groq",
+    "langchain_openai",
+    "langchain-anthropic",
+    "langchain-community",
+    "langchain-huggingface"
+]
+[project.urls]
+Homepage = "https://github.com/salsina/PCS-Python-Library"
+Issues = "https://github.com/salsina/PCS-Python-Library/issues"
+

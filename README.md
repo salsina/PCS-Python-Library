@@ -1,2 +1,3 @@
-# PCS-Python-Library
-A Python library for classification tasks using multiple LLMs 
+This is a simple example package. You can use
+[GitHub-flavored Markdown](https://guides.github.com/features/mastering-markdown/)
+to write your content.
