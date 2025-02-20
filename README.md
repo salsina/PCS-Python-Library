@@ -22,6 +22,9 @@ Respond only with the label and the reasoning.
 """
 ```
 
+### Training Dataset Path (`dataset_path`)
+
+You will need a CSV file with two columns: `label` and `text` to ensure better annotation, as the data is used to train the LLMs.
 
 
 
@@ -32,7 +35,7 @@ The `PCS` class allows you to customize various hyperparameters, including the c
 
 ### 📌 Example Usage
 ```python
-PCS(
+pcs = PCS(
     prompt="Your classification prompt here",
     dataset_path="path/to/dataset.csv",
     annotators=["llama3-8b-8192", "mistralai/Mistral-7B-Instruct-v0.3", "google/gemma-2-9b-it"],
@@ -40,15 +43,14 @@ PCS(
     GROQ_API_KEY=None,
     OPENAI_API_KEY=None,
     ANTHROPIC_API_KEY=None,
-    HUGGINGFACE_API_KEY=None
+    HUGGINGFACE_API_KEY=None,
+    train=True
 )
+
+print(pcs.annotate("America is a country"))
 ```
 
 # Configuration
-## 🔹 Training Dataset (`dataset_path`)
-
-You will need a CSV file with two columns: `label` and `text` to ensure better annotation, as the data is used to train the LLMs.
-
 
 ## 🔹 Annotators (`annotators`)
 Defines the list of LLMs used for annotation.
@@ -76,13 +78,8 @@ To access certain LLM models, you need to provide API keys. These can be passed 
 | `HUGGINGFACE_API_KEY` | Required for **Mistral and Google Gemma models**. |
 
 
-
-
-
-
-
-### Annotate a New Text
-
-```python
-print(pcs.annotate("America is a country"))
-
+## 🔹 Continue the Training (`train`)
+Determines whether to continue optimizing weights using more data or not
+* **Default Value**: `True`
+* **Customization**:
+   * You can change to `False`
