@@ -45,7 +45,7 @@ pcs = PCS(
     train=True
 )
 
-print(pcs.annotate("America is a country"))
+print(pcs.annotate("The Earth's temperature has risen during the past 10 years"))
 ```
 
 # Configuration
