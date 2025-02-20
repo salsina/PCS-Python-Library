@@ -8,10 +8,6 @@ pip install pcs-annotator
 
 ## How to Use
 
-```python
-from pcs_annotator import PCS
-```
-
 ### Create a Prompt for Classification Tasks
 
 ```python
@@ -35,6 +31,8 @@ The `PCS` class allows you to customize various hyperparameters, including the c
 
 ### 📌 Example Usage
 ```python
+from pcs_annotator import PCS
+
 pcs = PCS(
     prompt="Your classification prompt here",
     dataset_path="path/to/dataset.csv",
