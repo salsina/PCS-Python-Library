@@ -1,4 +1,4 @@
-# PCS Annotator: A Python Library for Classification Tasks Using Multiple LLMs
+# PCS Annotator: A Python Library for Classification Tasks Using Multiple LLMs Using LangChain
 
 ## How to Install
 
