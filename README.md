@@ -38,7 +38,7 @@ The `PCS` class allows you to customize various hyperparameters, including the c
 pcs = PCS(
     prompt="Your classification prompt here",
     dataset_path="path/to/dataset.csv",
-    annotators=["llama3-8b-8192", "mistralai/Mistral-7B-Instruct-v0.3", "google/gemma-2-9b-it"],
+    annotators=["llama3-8b-8192", "mistralai/Mistral-7B-Instruct-v0.3", "gemma-2-9b-it"],
     textmutator="llama-3.1-8b-instant",
     GROQ_API_KEY=None,
     OPENAI_API_KEY=None,
