@@ -1,4 +1,4 @@
-# PCS Annotator: A Python Library for Classification Tasks with Multiple LLMs Using LangChain
+# PCS Annotator: A Python Library for Classification Tasks Using Multiple LLMs
 
 ## How to Install
 
@@ -7,6 +7,10 @@ pip install pcs-annotator
 ```
 
 ## How to Use
+
+```python
+from pcs_annotator import PCS
+```
 
 ### Create a Prompt for Classification Tasks
 
@@ -31,8 +35,6 @@ The `PCS` class allows you to customize various hyperparameters, including the c
 
 ### 📌 Example Usage
 ```python
-from pcs_annotator import PCS
-
 pcs = PCS(
     prompt="Your classification prompt here",
     dataset_path="path/to/dataset.csv",
@@ -45,7 +47,7 @@ pcs = PCS(
     train=True
 )
 
-print(pcs.annotate("The Earth's temperature has risen during the past 10 years"))
+print(pcs.annotate("America is a country"))
 ```
 
 # Configuration

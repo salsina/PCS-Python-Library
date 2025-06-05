@@ -1,9 +1,9 @@
-from LLM import LLM
-from Tools import *
+from .LLM import LLM
+from .Tools import *
 
 class Annotator(LLM):
-    def __init__(self, prompt, labels, model_name="llama3-8b-8192"):
-        super().__init__(model_name)
+    def __init__(self, prompt, labels, model_name="llama3-8b-8192", token=None):
+        super().__init__(model_name, token)
         
         self.prompt = prompt
         self.labels = labels
@@ -26,7 +26,6 @@ class Annotator(LLM):
         try:
             ans = self.llm.invoke(input_prompt)
             ans = trim_text(ans)
-            
             label = extract_label(ans, labels=self.labels)
             if label:
                 reasoning = extract_reasoning(ans)
@@ -35,6 +34,6 @@ class Annotator(LLM):
             return label, None        
         
         except Exception as e:
-            
+            print(self.model_name)
             print(f"Error querying model: {e}")
             return None, None

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pcs-annotator"
-version = "0.0.1"
+version = "0.2.0"
 authors = [
     { name = "Sina Salimian", email = "sina99.sn@gmail.com" }
 ]

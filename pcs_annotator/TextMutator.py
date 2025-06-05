@@ -1,12 +1,12 @@
-from LLM import LLM
-from Tools import *
+from .LLM import LLM
+from .Tools import *
 
 class TextMutator(LLM):
-    def __init__(self, model_name="llama-3.1-8b-instant"):
-        super().__init__(model_name)
+    def __init__(self, model_name="llama-3.1-8b-instant", token=None):
+        super().__init__(model_name, token)
 
 
-    def MutateText(self, text, mr, custom_prompt=None):
+    def MutateText(self, text, mr):
         if mr == "passive_active":
             prompt = f"""Review the text below and transform all sentences by converting active voice to passive voice and vice versa, where appropriate.
 

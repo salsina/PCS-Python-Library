@@ -1,15 +1,15 @@
-from TextMutator import TextMutator
-from Annotator import Annotator
+from .TextMutator import TextMutator
+from .Annotator import Annotator
 import pandas as pd
 import os
 import numpy as np
 from scipy.optimize import differential_evolution
 from tqdm import tqdm
-
+from sklearn.linear_model import LinearRegression
 
 
 class PCS:
-    def __init__(self, prompt, dataset_path, annotators=["llama3-8b-8192", "mistralai/Mistral-7B-Instruct-v0.3", "google/gemma-2-9b-it"]):
+    def __init__(self, prompt, dataset_path, annotators=["llama3-8b-8192", "mistralai/Mistral-7B-Instruct-v0.3", "google/gemma-2-9b-it"], textmutator="llama-3.1-8b-instant", GROQ_API_KEY=None, OPENAI_API_KEY=None, ANTHROPIC_API_KEY=None, HUGGINGFACE_API_KEY=None, train=True):
         self.prompt=prompt
         if os.path.exists(dataset_path):
             self.dataset_path = dataset_path
@@ -17,23 +17,47 @@ class PCS:
             raise FileNotFoundError(f"Invalid dataset path {dataset_path}") 
         self.annotator_model_names = annotators
         self.annotators = []
-        self.textMutator = TextMutator()
+
+        if textmutator.startswith("llama") or textmutator.startswith("gemma"):
+            self.textMutator = TextMutator(model_name=textmutator, token=GROQ_API_KEY)
+        elif textmutator.startswith("gpt"):
+            self.textMutator = TextMutator(model_name=textmutator, token=OPENAI_API_KEY)
+        elif textmutator.startswith("claude"):
+            self.textMutator = TextMutator(model_name=textmutator, token=ANTHROPIC_API_KEY)
+        elif textmutator.startswith("mistral"):
+            self.textMutator = TextMutator(model_name=textmutator, token=HUGGINGFACE_API_KEY)
+        else:
+            raise ValueError(f"Unsupported text mutator model name: {textmutator}")
+
 
         self.annotations_filename = self.dataset_path.rsplit(".csv", 1)[0] + "_annotations.csv"
         self.dataset = pd.read_csv(dataset_path)
         self.possible_labels = self.dataset["label"].unique().tolist()
         for annotator_model_name in self.annotator_model_names:
-            self.annotators.append(Annotator(prompt=self.prompt, labels=self.possible_labels, model_name=annotator_model_name))
+            if annotator_model_name.startswith("llama") or annotator_model_name.startswith("gemma"):
+                token = GROQ_API_KEY
+            elif annotator_model_name.startswith("gpt"):
+                token = OPENAI_API_KEY
+            elif annotator_model_name.startswith("claude"):
+                token = ANTHROPIC_API_KEY
+            elif annotator_model_name.startswith("mistral") :
+                token = HUGGINGFACE_API_KEY
+            else:
+                raise ValueError(f"Unsupported annotator model name: {annotator_model_name}")
+
+            self.annotators.append(Annotator(prompt=self.prompt, labels=self.possible_labels, model_name=annotator_model_name, token=token))
         self.optimal_llm_weights = [1] * len(self.annotators)
         self.optimal_mr_weights = [1] * 4
-        self.optimal_label_thresholds = [0.5] * len(self.possible_labels)
+        # self.optimal_label_thresholds = [0.5] * len(self.possible_labels)
         
-        print("Labelling the dataset...")
-        self.create_annotations()
-        print("Generated the dataset annotations.")
+        if train:
+            print("Labelling the dataset...")
+            self.create_annotations()
+            print("Generated the dataset annotations.")
 
         print("Optimizing weights...")
-        self.PDE()
+        # self.PDE()
+        self.LR()
         print("Done Optimizing weights.")
 
     def create_annotations(self):
@@ -85,73 +109,41 @@ class PCS:
                     
                 pbar.update(1)  # Update progress bar
 
-    
-    def get_majority_vote_label(self, majority_votes, possible_labels=None):
-        if not possible_labels:
-            possible_labels = self.possible_labels
 
-        vote_counts = {label.strip().lower(): 0 for label in possible_labels}
 
-        for vote in majority_votes:
-            if not pd.isna(vote):
-                lowered_vote = vote.strip().lower()
-                if lowered_vote in vote_counts:
-                    vote_counts[lowered_vote] += 1
-
-        max_votes = max(vote_counts.values()) 
-                
-        for label, count in vote_counts.items():
-            if count == max_votes:
-                return label
-
-    def get_pcs_label(self, llm_labels, w_llms=None, w_mrs=None, label_thresholds=None, possible_labels=None):
+    def get_pcs_label(self, llm_labels, w_llms=None, w_mrs=None, possible_labels=None):
         if possible_labels is None:
             possible_labels = self.possible_labels
         if w_llms is None:
             w_llms = self.optimal_llm_weights
         if w_mrs is None:
             w_mrs = self.optimal_mr_weights
-        if label_thresholds is None:
-            label_thresholds = self.optimal_label_thresholds
 
         num_labels = len(possible_labels)
-        pcs_labels = [0] * num_labels 
-        
+        pcs_labels = np.zeros(num_labels)
+
         for i in range(len(w_llms)):
-            pcs_label_llm = [0] * num_labels
+            pcs_label_llm = np.zeros(num_labels)
             for j in range(len(llm_labels[i])): #Iterate through MR labels 
                 for k in range(len(pcs_label_llm)):
-                    if not pd.isna(llm_labels[i][j]):
+                    if llm_labels[i][j]:
                         if llm_labels[i][j].strip().lower() == possible_labels[k].strip().lower():
                             pcs_label_llm[k] += w_mrs[j]
 
-            for j in range(len(pcs_label_llm)):
-                # pcs_label_llm[j] = pcs_label_llm[j]/sum(w_mrs)
-                if sum(w_mrs) != 0:
-                    pcs_label_llm[j] = pcs_label_llm[j] / sum(w_mrs)
-                else:
-                    pcs_label_llm[j] = 0 
+            # Normalize by sum of MR weights
+
+            if sum(w_mrs) != 0:
+                pcs_label_llm = pcs_label_llm / sum(w_mrs)
                 
-            for j in range(len(pcs_label_llm)):
-                pcs_labels[j] += w_llms[i] * pcs_label_llm[j]
+            # Weight by LLM weights and accumulate
+            pcs_labels += w_llms[i] * pcs_label_llm
 
-        for i in range(num_labels):
-            if sum(w_llms) != 0:
-                pcs_labels[i] = pcs_labels[i]/sum(w_llms)
-            else:
-                pcs_labels[i] = 0 
+        # Normalize by sum of LLM weights
 
-        for i in range(num_labels):
-            if pcs_labels[i] > label_thresholds[i]:
-                final_pred = possible_labels[i]
-                return final_pred
+        if sum(w_llms) != 0:
+            pcs_labels = pcs_labels / sum(w_llms)
 
-        majority_votes = []
-        for i in range(len(w_llms)):
-            majority_votes.append(llm_labels[i][0])
-    
-        return self.get_majority_vote_label(majority_votes, possible_labels)
-
+        return pcs_labels
 
     def Objective(self, params, llm_preds, NUM_LLMS, NUM_MRS, manual_labels):
         w_mrs = params[:NUM_MRS]  # Weights for 4 MRs
@@ -172,8 +164,10 @@ class PCS:
         return -accuracy  # We want to maximize accuracy, so we minimize negative accuracy
 
     def PDE(self):
-        df = pd.read_csv(self.annotations_filename)
-
+        if os.path.exists(self.annotations_filename):
+            df = pd.read_csv(self.annotations_filename)
+        else:
+            return
         # Define model column mappings
         model_columns = []
         for annotator in self.annotators:
@@ -193,11 +187,166 @@ class PCS:
         self.optimal_llm_weights = optimal_params[NUM_MRS:NUM_MRS+NUM_LLMS]
         self.optimal_label_thresholds = optimal_params[NUM_MRS+NUM_LLMS:NUM_MRS+NUM_LLMS+len(self.possible_labels)]
         self.Accuracy = -result.fun
+
+
+    def compute_features(self, llm_preds, selected_indices, optimize_params=["LLM", "MR"]):
+        """
+        Compute feature matrix for linear regression.
+        Each row represents an example, and columns represent feature combinations based on optimize_params.
+        
+        Args:
+            llm_preds: Predictions from LLMs (shape: [n_samples, n_llms, n_mrs])
+            labels: List of possible label categories
+            selected_indices: Indices of samples to use
+            optimize_params: List of parameters to optimize (can include "LLM", "MR")
+        """
+        num_examples = len(selected_indices)
+        num_llms = llm_preds.shape[1]
+        num_mrs = llm_preds.shape[2]
+        num_labels = len(self.possible_labels)
+        
+        # Determine feature structure based on optimize_params
+        if "LLM" in optimize_params and "MR" in optimize_params:
+            # Original case: optimize both LLM and MR
+            feature_dim = num_llms * num_mrs * num_labels
+            
+            # Initialize feature matrix
+            X = np.zeros((num_examples, feature_dim))
+            
+            for idx, sample_idx in enumerate(selected_indices):
+                for i in range(num_llms):
+                    for j in range(num_mrs):
+                        for k, label in enumerate(self.possible_labels):
+                            # Check if this LLM-MR combination predicts this label
+                            if llm_preds[sample_idx, i, j].strip().lower() == label.strip().lower():
+                                feature_idx = i * (num_mrs * num_labels) + j * num_labels + k
+                                X[idx, feature_idx] = 1
+                                
+        elif "LLM" in optimize_params:
+            # Only optimize LLM weights
+            feature_dim = num_llms * num_labels
+            
+            # Initialize feature matrix
+            X = np.zeros((num_examples, feature_dim))
+            
+            for idx, sample_idx in enumerate(selected_indices):
+                for i in range(num_llms):
+                    # Aggregate across all MRs for each LLM
+                    llm_preds_aggregated = []
+                    for j in range(num_mrs):
+                        llm_preds_aggregated.append(llm_preds[sample_idx, i, j].strip().lower())
+                    
+                    for k, label in enumerate(self.possible_labels):
+                        # Count how many times this LLM predicts this label across MRs
+                        count = llm_preds_aggregated.count(label.strip().lower())
+                        if count > 0:
+                            feature_idx = i * num_labels + k
+                            X[idx, feature_idx] = count / num_mrs  # Normalize by number of MRs
+                            
+        elif "MR" in optimize_params:
+            # Only optimize MR weights
+            feature_dim = num_mrs * num_labels
+            
+            # Initialize feature matrix
+            X = np.zeros((num_examples, feature_dim))
+            
+            for idx, sample_idx in enumerate(selected_indices):
+                for j in range(num_mrs):
+                    # Aggregate across all LLMs for each MR
+                    mr_preds_aggregated = []
+                    for i in range(num_llms):
+                        mr_preds_aggregated.append(llm_preds[sample_idx, i, j].strip().lower())
+                    
+                    for k, label in enumerate(self.possible_labels):
+                        # Count how many times this MR predicts this label across LLMs
+                        count = mr_preds_aggregated.count(label.strip().lower())
+                        if count > 0:
+                            feature_idx = j * num_labels + k
+                            X[idx, feature_idx] = count / num_llms  # Normalize by number of LLMs
+        else:
+            # If optimize_params is empty or contains invalid parameters, default to both
+            return self.compute_features(llm_preds, selected_indices, ["LLM", "MR"])
+        
+        return X
+
+    def LR(self):
+        if os.path.exists(self.annotations_filename):
+            df = pd.read_csv(self.annotations_filename)
+        else:
+            return
+        # Define model column mappings
+        model_columns = []
+        for annotator in self.annotators:
+            model_columns.append(df[[f"{annotator.model_name}_text", f"{annotator.model_name}_text_mr1", f"{annotator.model_name}_text_mr2", f"{annotator.model_name}_text_mr3"]])
+        llm_preds = np.stack(model_columns, axis=1)
+
+        manual_labels = df['label'].values
+        size, NUM_LLMS, NUM_MRS = llm_preds.shape[:3]
+
+        NUM_LABELS = len(self.possible_labels)
+        optimize_params = ["LLM", "MR"]
+        N_samples = llm_preds.shape[0]
+        selected_indices = np.random.choice(N_samples, size, replace=False)
+        
+        # Prepare target variable (one-hot encoded labels)
+        y = np.zeros((len(selected_indices), NUM_LABELS))
+        for i, idx in enumerate(selected_indices):
+            label_idx = self.possible_labels.index(manual_labels[idx].strip().lower())
+            y[i, label_idx] = 1
+        
+        # Compute features based on optimize_params
+        X = self.compute_features(llm_preds, selected_indices, optimize_params)
+
+        # Train linear regression model
+        model = LinearRegression(positive=True)  # Ensure positive weights
+        model.fit(X, y)
+        
+        # Extract weights from coefficients
+        coefficients = model.coef_
+        weights = np.sum(coefficients, axis=0)
+        # Initialize weights
+        optimal_llm_weights = None
+        optimal_mr_weights = None
+        
+        # Extract and reshape weights based on optimize_params
+        if "LLM" in optimize_params and "MR" in optimize_params:
+            # Original case: optimize both LLM and MR
+            reshaped_weights = weights.reshape(NUM_LLMS, NUM_MRS, NUM_LABELS)
+            # Average across labels to get LLM and MR weights
+            optimal_llm_weights = np.mean(np.sum(reshaped_weights, axis=1), axis=1)
+            optimal_mr_weights = np.mean(np.sum(reshaped_weights, axis=0), axis=1)
+        elif "LLM" in optimize_params:
+            # Only optimize LLM weights
+            reshaped_weights = weights.reshape(NUM_LLMS, NUM_LABELS)
+            optimal_llm_weights = np.mean(reshaped_weights, axis=1)
+            
+            # Use uniform weights for MRs
+            optimal_mr_weights = np.ones(NUM_MRS) / NUM_MRS
+            
+        elif "MR" in optimize_params:
+            # Only optimize MR weights
+            reshaped_weights = weights.reshape(NUM_MRS, NUM_LABELS)
+            optimal_mr_weights = np.mean(reshaped_weights, axis=1)
+            
+            # Use uniform weights for LLMs
+            optimal_llm_weights = np.ones(NUM_LLMS) / NUM_LLMS
+        
+        # Normalize weights
+        if optimal_llm_weights is not None and np.sum(optimal_llm_weights) > 0:
+            optimal_llm_weights = optimal_llm_weights / np.sum(optimal_llm_weights)
+
+        if optimal_mr_weights is not None and np.sum(optimal_mr_weights) > 0:
+            optimal_mr_weights = optimal_mr_weights / np.sum(optimal_mr_weights)
+        
+        self.optimal_mr_weights = optimal_mr_weights
+        self.optimal_llm_weights = optimal_llm_weights
+
         
     def annotate(self, text):
         text_mr1 = self.textMutator.MutateText(text=text, mr="passive_active")
         text_mr2 = self.textMutator.MutateText(text=text, mr="double_negation")
         text_mr3 = self.textMutator.MutateText(text=text, mr="synonym")
+
         llm_preds = []
         for annotator in self.annotators:
             annotations = []
@@ -207,6 +356,10 @@ class PCS:
             annotations.append(annotator.annotate(text_mr3)[0])
             llm_preds.append(annotations)
 
-        pcs_label = self.get_pcs_label(llm_preds)
-        return pcs_label
+        print(llm_preds)
+        confidences = self.get_pcs_label(llm_preds)
+        label_confidences = {}
+        for i in range(len(self.possible_labels)):
+            label_confidences[self.possible_labels[i]] = confidences[i]
+        return label_confidences
 
