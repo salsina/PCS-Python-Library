@@ -9,7 +9,7 @@ from sklearn.linear_model import LinearRegression
 
 
 class PCS:
-    def __init__(self, prompt, dataset_path, annotators=["llama3-8b-8192", "mistralai/Mistral-7B-Instruct-v0.3", "google/gemma-2-9b-it"], textmutator="llama-3.1-8b-instant", GROQ_API_KEY=None, OPENAI_API_KEY=None, ANTHROPIC_API_KEY=None, HUGGINGFACE_API_KEY=None, train=True):
+    def __init__(self, prompt, dataset_path, annotators=["llama3-8b-8192", "mistralai/Mistral-7B-Instruct-v0.3", "gemma-2-9b-it"], textmutator="llama-3.1-8b-instant", GROQ_API_KEY=None, OPENAI_API_KEY=None, ANTHROPIC_API_KEY=None, HUGGINGFACE_API_KEY=None, generate_annotations=True, Optimizer="LR"):
         self.prompt=prompt
         if os.path.exists(dataset_path):
             self.dataset_path = dataset_path
@@ -50,14 +50,16 @@ class PCS:
         self.optimal_mr_weights = [1] * 4
         # self.optimal_label_thresholds = [0.5] * len(self.possible_labels)
         
-        if train:
-            print("Labelling the dataset...")
+        if generate_annotations:
+            print("Generating annotations...")
             self.create_annotations()
             print("Generated the dataset annotations.")
 
         print("Optimizing weights...")
-        # self.PDE()
-        self.LR()
+        if Optimizer == "LR":
+            self.LR()
+        elif Optimizer == "GA":
+            self.GA()
         print("Done Optimizing weights.")
 
     def create_annotations(self):
@@ -148,11 +150,10 @@ class PCS:
     def Objective(self, params, llm_preds, NUM_LLMS, NUM_MRS, manual_labels):
         w_mrs = params[:NUM_MRS]  # Weights for 4 MRs
         w_llms = params[NUM_MRS:NUM_MRS+NUM_LLMS]  # Weights for 3 LLMs
-        label_thresholds = params[NUM_MRS+NUM_LLMS:NUM_MRS+NUM_LLMS+len(self.possible_labels)]
         predictions = []
 
         predictions = [
-            self.get_pcs_label(llm_preds[i, :], w_llms, w_mrs, label_thresholds)
+            self.get_pcs_label(llm_preds[i, :], w_llms, w_mrs)
             for i in range(len(manual_labels))
         ]
             
@@ -163,7 +164,7 @@ class PCS:
         ])
         return -accuracy  # We want to maximize accuracy, so we minimize negative accuracy
 
-    def PDE(self):
+    def GA(self):
         if os.path.exists(self.annotations_filename):
             df = pd.read_csv(self.annotations_filename)
         else:
@@ -177,7 +178,7 @@ class PCS:
         manual_labels = df['label'].values
         size, NUM_LLMS, NUM_MRS = llm_preds.shape[:3]
 
-        bounds = [(0, 1)] * (NUM_LLMS + NUM_MRS + len(self.possible_labels))
+        bounds = [(0, 1)] * (NUM_LLMS + NUM_MRS)
         
         result = differential_evolution(self.Objective, bounds, args=(llm_preds, NUM_LLMS, NUM_MRS, manual_labels))
         
@@ -185,8 +186,6 @@ class PCS:
         
         self.optimal_mr_weights = optimal_params[:NUM_MRS]
         self.optimal_llm_weights = optimal_params[NUM_MRS:NUM_MRS+NUM_LLMS]
-        self.optimal_label_thresholds = optimal_params[NUM_MRS+NUM_LLMS:NUM_MRS+NUM_LLMS+len(self.possible_labels)]
-        self.Accuracy = -result.fun
 
 
     def compute_features(self, llm_preds, selected_indices, optimize_params=["LLM", "MR"]):

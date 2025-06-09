@@ -17,8 +17,7 @@ from pcs_annotator import PCS
 ```python
 prompt = """Analyze the news article and determine whether it is 'Fake' or 'Real.'
 Label the article using the tag format: <label>Fake</label> or <label>Real</label>.
-Afterward, provide your reasoning after the “<reasoning>” tag and close it with "</reasoning>".
-Respond only with the label and the reasoning.
+Respond only with the label.
 """
 ```
 
@@ -44,10 +43,18 @@ pcs = PCS(
     OPENAI_API_KEY=None,
     ANTHROPIC_API_KEY=None,
     HUGGINGFACE_API_KEY=None,
-    train=True
+    generate_annotations=True,
+    Optimizer="LR"  # or "GA"
 )
 
 print(pcs.annotate("America is a country"))
+```
+### 🖨️ Output
+
+The `.annotate()` function returns a dictionary of confidence scores for each label:
+
+```python
+{'Real': 0.87, 'Fake': 0.13}
 ```
 
 # Configuration
@@ -72,14 +79,54 @@ To access certain LLM models, you need to provide API keys. These can be passed 
 
 | API Key | Purpose |
 |---------|---------|
-| `GROQ_API_KEY` | Required for **Llama models**. Set via argument or `.env` file. |
+| `GROQ_API_KEY` | Required for **Llama and Google Gemma models**. Set via argument or `.env` file. |
 | `OPENAI_API_KEY` | Required for **OpenAI models** (e.g., `"gpt-4"`). |
 | `ANTHROPIC_API_KEY` | Required for **Anthropic models** (e.g., `"claude-3-5-sonnet-20241022"`). |
-| `HUGGINGFACE_API_KEY` | Required for **Mistral and Google Gemma models**. |
+| `HUGGINGFACE_API_KEY` | Required for **Mistral models**. |
 
 
-## 🔹 Continue the Training (`train`)
-Determines whether to continue optimizing weights using more data or not
+## 🔹 Continue the Training (`generate_annotations`)
+Determines whether to continue generating more annotations in the dataset or not
 * **Default Value**: `True`
 * **Customization**:
    * You can change to `False`
+
+
+
+## ⚙️ Optimizer (`Optimizer`)
+
+The `PCS` class supports weight optimization strategies for combining LLM predictions and Metamorphic Relation (MR) outputs. You can choose the optimizer during initialization using the `Optimizer` parameter.
+
+### 🔧 Options
+
+| Value   | Description                                                                 |
+|---------|-----------------------------------------------------------------------------|
+| `"LR"`  | **Linear Regression** – Optimizes annotator and MR weights via regression. *(default)* |
+| `"GA"`  | **Genetic Algorithm** – Uses evolutionary search to find optimal weights.   |
+
+
+
+## ➕ Adding a Custom Metamorphic Relation (MR)
+
+You can define and register your own MR by passing a custom prompt-generation function to the `TextMutator` class:
+
+```python
+from pcs_annotator.TextMutator import TextMutator
+
+# Define a new MR prompt
+def custom_negation_prompt(text):
+    return f"""Transform all affirmative statements in the following text into their negated forms.
+Start the response with 'new_text:' and include only the revised text.
+
+Original Text:
+{text}
+"""
+```
+
+# Initialize a mutator and register the new MR
+mutator = TextMutator(model_name="llama-3.1-8b-instant", token="your_groq_api_key")
+mutator.register_mr("custom_negation", custom_negation_prompt)
+
+# Apply the new MR
+mutated_text = mutator.MutateText("The cat is on the table.", "custom_negation")
+print(mutated_text)

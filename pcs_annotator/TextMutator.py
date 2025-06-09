@@ -4,52 +4,50 @@ from .Tools import *
 class TextMutator(LLM):
     def __init__(self, model_name="llama-3.1-8b-instant", token=None):
         super().__init__(model_name, token)
+        self.mr_templates = {
+            "passive_active": self._passive_active_prompt,
+            "double_negation": self._double_negation_prompt,
+            "synonym": self._synonym_prompt
+        }
 
+    def register_mr(self, mr_name, template_fn):
+        """Allows users to register a new MR and its template-generating function."""
+        self.mr_templates[mr_name] = template_fn
 
     def MutateText(self, text, mr):
-        if mr == "passive_active":
-            prompt = f"""Review the text below and transform all sentences by converting active voice to passive voice and vice versa, where appropriate.
+        if mr not in self.mr_templates:
+            raise ValueError(f"Unknown MR: {mr}. Please register it using `register_mr()`.")
 
-            Provide only the revised text, without extra information, starting with the term "new_text:"
-
-            Original Text:
-            {text}
-            """
-            
-        if mr == "double_negation":
-            prompt = f"""Review the text below and transform affirmative sentences into double negation sentences. (Double negation means using two negative elements within a clause or sentence, typically leading to a positive implication.) Ensure that the transformations maintain equivalent meanings.
-
-            Provide only the revised text, without extra information, starting with the term "new_text:"
-
-            Original Text:
-            {text}
-            """
-        
-
-        if mr == "synonym":
-            prompt = f"""Review the text below and Replace key words with their synonyms. Ensure that the transformed sentences retain equivalent meanings.
-
-            Provide only the revised text, without extra information, starting with the term "new_text:"
-
-            Original Text:
-            {text}
-            """
+        prompt = self.mr_templates[mr](text)
 
         try:
             ans = self.llm.invoke(prompt)
-            if "new_text:" in ans:
-                ans = ans.split("new_text:")[1]
-            elif "New Text:" in ans:
-                ans = ans.split("New Text:")[1]
-            elif "New_Text:" in ans:
-                ans = ans.split("New_Text:")[1]
-
-            ans = trim_text(ans)
-
-            return ans        
-        
+            for key in ["new_text:", "New Text:", "New_Text:"]:
+                if key in ans:
+                    ans = ans.split(key)[1]
+                    break
+            return trim_text(ans)
         except Exception as e:
-            
             print(f"Error querying model: {e}")
             return None
 
+    def _passive_active_prompt(self, text):
+        return f"""Review the text below and transform all sentences by converting active voice to passive voice and vice versa, where appropriate.
+            Provide only the revised text, without extra information, starting with the term "new_text:"
+            Original Text:
+            {text}
+            """
+
+    def _double_negation_prompt(self, text):
+        return f"""Review the text below and transform affirmative sentences into double negation sentences.
+            Provide only the revised text, without extra information, starting with the term "new_text:"
+            Original Text:
+            {text}
+            """
+
+    def _synonym_prompt(self, text):
+        return f"""Review the text below and replace key words with their synonyms. Ensure that the transformed sentences retain equivalent meanings.
+            Provide only the revised text, without extra information, starting with the term "new_text:"
+            Original Text:
+            {text}
+            """
